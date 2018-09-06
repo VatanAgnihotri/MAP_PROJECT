@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>
+			My Map
+		</title>
+		<link rel="stylesheet" href="lib/leaflet/leaflet.css" />
+		<link rel="stylesheet" href="lib/leaflet/leaflet.label.css" />
+		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>		
+		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+		<script src="lib/leaflet/leaflet.js"></script>
+		<script src="lib/leaflet/leaflet.label.js"></script>
+		<script src="http://maps.google.com/maps/api/js?v=3&sensor=false"></script>
+		<script src="lib/leaflet/Google.js"></script>
+		<script src="data/countries.geojson"></script>
+		<script src="app.js"></script>
+		<style type="text/css">
+			#map{height:400px;}
+			.legend {background:white; line-height:1.5em}
+			.legend i {width:5em; float:left}
+			.map-label{ background : lightblue}
+			table,tr,td{
+				border: 1px solid black;
+			}
+		</style>
+	</head> 	 
+	 <body>
+		 <div style='background-color:blue'>
+		 <h1 style='text-align:center'>My Map</h1>
+		 </div>
+		 <div id="showcourse">
+				<form>
+						<div class="form-row">
+							<div class="col-7">
+								<input type="text" class="form-control" id="locname" name="location" placeholder="Location">
+							</div>
+							<div class="col">
+								<input type="number" id="lat" step="0.0000000000001" min="0" name="latitude" class="form-control" placeholder="Latitude">
+							</div>
+							<div class="col">
+								<input type="number" id="long" step="0.000000000001" min="0" name="longitude" class="form-control" placeholder="Longitude">
+							</div>
+						</div>
+						<input type="submit" value="Submit" onclick="addPoint()">
+					</form>
+			<button type="button" onclick="submitRequest('/api/user', 
+ 				 'GET', undefined, undefined, handleGetCourse)">Get All Points</button>
+		 </div>
+		 <div id="map"></div>
+		 <div id="allPoints">
+		 </div>
+		 <script>
+			 var countriesLayer;
+			 
+			 function highlightFeature(e){
+				 var layer = e.target;
+				 layer.setStyle(
+					 {
+					   weight: 5,
+					   color:'black',
+					   fillColor:'white',
+					   fillOpacity:0.2
+					 }
+				 );
+				 if(!L.Browser.ie && !L.Browser.opera){
+					 layer.bringToFront();
+				 }
+			 }
+			 
+			 function resetHighlight(e){
+				 countriesLayer.resetStyle(e.target);
+			 }
+			 
+			 function zoomToFeature(e){
+				 map.fitBounds(e.target.getBounds());
+			 }
+		   
+			 var markers = new Array();
+			 function countriesOnEachFeature(feature, layer){
+//				  layer.bindLabel(feature.properties.POP_EST.toString(),{noHide:true});
+				 markers.push(
+				  L.circleMarker(
+					layer.getBounds().getCenter(),
+					{
+						radius : 0.0,
+						opacity: 0,
+						fillOpacity: 0
+					}
+				  )
+				 );
+				 var markersCount = markers.length;
+				 markers[markersCount - 1].bindLabel(
+				   feature.properties.POP_EST.toString(),
+				   {
+					  noHide: true,
+					  className: 'map-label',
+					  pane:'mapPane'
+				   }
+				 );
+				 markers[markersCount-1].addTo(map);
+				 markers[markersCount-1].hideLabel();
+				 layer.on(
+					 {
+						 mouseover: highlightFeature,
+						 mouseout: resetHighlight,
+						 click: zoomToFeature
+					 }
+				 )
+			 }
+			 
+			 function getCountryColor(popEst){
+				 if(popEst > 100000000){
+					 return 'red';
+				 }else if(popEst > 50000000){
+					 return 'blue';
+				 }else{
+					 return 'green';
+				 }
+			 }
+			 //coutries Style
+			 function countriesStyle(feature){
+			   return{
+				  fillColor: getCountryColor(feature.properties.POP_EST),
+				  weight:2,
+				  opacity:1,
+				  color:'white',
+				  dashArray:3,
+				  fillOpacity:0.7	
+			   }  
+			 }
+			 
+			 var map = L.map('map').setView([43.8476, 18.3564], 6);
+			 
+			 var googleLayer = new L.Google();
+			 map.addLayer(googleLayer);
+			 
+			 var googleRoadmapLayer = new L.Google('ROADMAP');
+			 map.addLayer(googleRoadmapLayer);
+			 
+			 //Country layer
+			 countriesLayer = L.geoJson(
+			 countries,
+			 {
+				 style:countriesStyle,
+				 onEachFeature: countriesOnEachFeature
+			 }
+			 ).addTo(map);
+			 map.fitBounds(countriesLayer.getBounds());
+			 
+			 var legend = L.control({position: 'bottomright'});
+			 legend.onAdd = function(map){
+				 var div = L.DomUtil.create('div', 'legend');
+				 var labels = [
+				 "Population greater than 100000000" , 
+				 "Population greater than 50000000", 
+				 "Population equal or less than 50000000"
+				 ];
+				 var grades = [100000001, 50000001, 50000000];
+				 div.innerHTML = '<div><b>Legend</b></div>';
+				 for(var i = 0; i < grades.length; i++){
+					 div.innerHTML += '<i style="background:'
+					 + getCountryColor(grades[i]) + '">&nbsp;&nbsp</i>&nbsp;&nbsp;'
+					 + labels[i] + '<br/>';
+				 }
+				 return div;
+			 }
+			 legend.addTo(map);
+			   var x;
+			   var y; 
+			   var z;
+			   function addPoint(){
+						x = document.getElementById("locname").value;
+						y = document.getElementById("lat").value; 
+						z = document.getElementById("long").value;
+							var point = [y, z];
+							var myMarker = L.marker(point);
+							myMarker.addTo(map);
+							myMarker.bindPopup(
+							x,
+							{minWidth: 256}
+								); 
+					console.log(x);
+					console.log(y);
+					console.log(z);
+					x="";
+					y=0;
+					z=0;
+			   }
+			 var visible;
+			 map.on(
+			   'zoomend',
+			   function(e){
+				 if(map.getZoom()>3){
+				  if(!visible){
+					 for(var i = 0;i<markers.length;i++){
+						 markers[i].showLabel();
+					 }
+					 visible = true;
+				  }
+				 }
+				 else{
+					if(visible){
+					 for(var i = 0;i<markers.length;i++){
+						 markers[i].hideLabel();
+					 }
+					 visible = false;
+				  }
+				 }
+			   }
+			 );
+			 
+			 var imageUrl = 'data/SP27GTIF.png';
+			 var imageBounds = [
+			 [41.91713209771033, -87.66747359388185],
+			 [41.83299831003662, -87.5823733664601],
+			 ];
+			var imageLayer =L.imageOverlay(imageUrl,imageBounds).addTo(map);
+			 map.fitBounds(imageBounds);
+			 
+			 var baseMaps = {
+				 'Google Roadmap':googleRoadmapLayer,
+				 'Google':googleLayer
+			 };
+			 var overlayMaps = {
+				 'Countries':countriesLayer,
+				 'Image':imageLayer
+			 };
+			 L.control.layers(baseMaps,overlayMaps).addTo(map);
+
+	 function bindForms() {
+      document.querySelector("form")
+        .addEventListener("submit", function (e) {
+ 
+          // Stop it from submitting
+          e.preventDefault();
+          var formId = this.id;
+        //   var path = this.action;
+        //   var method = this.method.toUpperCase();
+
+          // Turn the inputs into a payload object
+          var payload = {};
+          var elements = this.elements;
+          for (var i = 0; i < elements.length; i++) {
+            if (elements[i].type !== 'submit') {
+              //var valueOfElement = elements[i].type == 'checkbox' ? elements[i].checked : elements[i].value;
+              var valueOfElement = elements[i].value;
+              payload[elements[i].name] = valueOfElement;
+            }
+          }
+
+          console.log(payload);
+
+          // Get the token
+        //   var token = getToken();
+        //   if (!token) {
+        //     // Display error and redirect to login page
+        //     return;
+        //   }
+          var headers = {};
+        //   setAuthTokenHeader(headers, token);
+		  // Submit the request
+		  //action="/api/user" method="POST"
+          submitRequest("/api/user", "POST", payload, headers);
+        });
+	}
+	bindForms();
+
+	function createTableFromCourseList(courseList) {
+      // Create a table element
+      var table = document.createElement("table");
+      // Create a heading
+
+      // Create the row and set row data
+      for (var i = 0; i < courseList.length; i++) {
+        // Insert a row
+        var tr = table.insertRow(-1);
+        // Add id attribute for course ID
+        tr.setAttribute("id", courseList[i]._id);
+        // Insert cells
+        var tcell = tr.insertCell(-1);
+        tcell.innerHTML = courseList[i].location;
+
+        tcell = tr.insertCell(-1);
+		tcell.innerHTML = courseList[i].latitude;
+		
+		tcell = tr.insertCell(-1);
+        tcell.innerHTML = courseList[i].longitude;
+
+        // Add 2 more cells for Edit and Delete buttons
+        tcell = tr.insertCell(-1);
+        // Create edit button
+        var editButton = document.createElement("button");
+        editButton.setAttribute("type", "button");
+        editButton.setAttribute("class", "edit");
+        editButton.innerHTML = "Edit";
+        tcell.appendChild(editButton);
+
+        // Delete button
+        tcell = tr.insertCell(-1);
+        // Create delete button
+        var deleteButton = document.createElement("button");
+        deleteButton.setAttribute("type", "button");
+        deleteButton.innerHTML = "Delete";
+		tcell.appendChild(deleteButton);
+		
+			var point = [courseList[i].latitude, courseList[i].longitude];
+			var myMarker = L.marker(point);
+			myMarker.addTo(map);
+			myMarker.bindPopup(
+				courseList[i].location,
+			{minWidth: 256}
+				); 
+      }
+
+      // Return the table element
+      return table;
+    }
+
+    function handleGetCourse(err, courseList) {
+      if (err) {
+        var table = document.createElement("p");
+        table.innerText = this.statusText;
+      }
+      else { // We got course list
+        var table = createTableFromCourseList(courseList);
+      }
+      // Set the table to course list placeholder
+      var divContainer = document.getElementById("allPoints");
+      divContainer.innerHTML = "";
+      divContainer.appendChild(table);
+
+      // Invoke the bind functions
+      bindEditButtons();
+
+    }
+
+
+    // Bind Edit buttons
+    function bindEditButtons() {
+      var elements = document.querySelectorAll("button.edit");
+      if (!elements)
+        return;
+
+      console.log(elements);
+      for (var i in elements) {
+        elements[i].addEventListener("click", function (e) {
+          console.log(e);
+          // Display the populated form for updating course
+
+          // Get the course id
+          // Perform a get request to get course info
+          // Display a populated form with update button
+
+        });
+      }
+    }
+		 </script>	  
+	 </body>
+</html>
